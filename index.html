@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://cdn.cloudflare.steamstatic.com; connect-src 'self' https://cdn.cloudflare.steamstatic.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>SteamPorter — 你的 Steam 终端</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='42' fill='%23ff6b6b'/%3E%3Ccircle cx='38' cy='42' r='12' fill='%230d0f14'/%3E%3Crect x='52' y='50' width='26' height='10' rx='5' fill='%230d0f14' transform='rotate(-20 65 55)'/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" width="34" height="34" aria-hidden="true">
+        <circle cx="50" cy="50" r="42" fill="url(#lg1)"/>
+        <circle cx="38" cy="42" r="12" fill="#0d0f14"/>
+        <rect x="52" y="50" width="26" height="10" rx="5" fill="#0d0f14" transform="rotate(-20 65 55)"/>
+        <defs><linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff6b6b"/><stop offset="1" stop-color="#a78bfa"/>
+        </linearGradient></defs>
+      </svg>
+      <span class="logo-text">Steam<b>Porter</b></span>
+    </div>
+    <nav id="nav">
+      <button class="nav-item" data-route="#/library" data-color="coral"><span class="dot"></span><span class="label">我的库</span></button>
+      <button class="nav-item" data-route="#/screenshots" data-color="cyan"><span class="dot"></span><span class="label">我的截图</span></button>
+      <button class="nav-item" data-route="#/saves" data-color="mint"><span class="dot"></span><span class="label">本地存档</span></button>
+      <button class="nav-item" data-route="#/purity" data-color="purple"><span class="dot"></span><span class="label">挂机检测</span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="trust-line">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+        数据只留在你的电脑里
+      </div>
+    </div>
+  </aside>
+  <main id="main">
+    <header id="topbar">
+      <div id="topbar-left">
+        <div id="user-chip" hidden>
+          <div id="user-avatar" class="avatar"></div>
+          <div id="user-info">
+            <div id="user-name">—</div>
+            <div id="user-sub"><span id="user-login-state">本地模式</span></div>
+          </div>
+          <button id="btn-logout" class="ghost-btn" title="退出登录">退出</button>
+        </div>
+      </div>
+      <div id="topbar-right">
+        <button id="btn-share" class="candy-btn candy-purple" hidden>生成分享卡片</button>
+        <button id="btn-connect" class="candy-btn candy-coral">连接 Steam</button>
+      </div>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<div id="scan-overlay" hidden>
+  <div class="scan-box">
+    <div class="scan-spinner"></div>
+    <div id="scan-phase">正在初始化…</div>
+    <div class="scan-bar"><div id="scan-bar-fill"></div></div>
+    <div id="scan-detail" class="scan-detail"></div>
+  </div>
+</div>
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

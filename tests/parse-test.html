@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>parser test</title>
+</head>
+<body>
+<pre id="out">RUNNING…</pre>
+<script type="module">
+import { parseTextVdf, getPath } from '../js/parsers/vdf.js';
+import { parseBinaryVdf, walkBinaryVdf, Reader } from '../js/parsers/bin-vdf.js';
+import { extractAppInfo } from '../js/data/appinfo.js';
+import { parseLocalConfigGames } from '../js/data/localconfig.js';
+import { parseLoginUsers } from '../js/data/loginusers.js';
+import { parseSchemaBin, parseUserStatsBin, detectSamBatches } from '../js/data/achievements.js';
+
+const out = document.getElementById('out');
+const results = [];
+function log(title, data) {
+  let s;
+  try { s = JSON.stringify(data, (k, v) => typeof v === 'bigint' ? v.toString() + 'n' : v, 2); }
+  catch (e) { s = String(data); }
+  results.push('===== ' + title + ' =====\n' + (s && s.length > 4000 ? s.slice(0, 4000) + '\n…(截断)' : s));
+}
+function flush() { out.textContent = results.join('\n\n') + '\n\n(运行中…)'; }
+async function step(title, fn) {
+  try { await fn(); } catch (e) {
+    results.push('===== ' + title + ' ★FAILED =====\n' + (e && e.stack ? e.stack : e));
+  }
+  flush();
+}
+async function fetchBuf(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('fetch ' + url + ' → ' + r.status);
+  return await r.arrayBuffer();
+}
+
+await step('loginusers', async () => {
+  const text = await (await fetch('data/loginusers.vdf')).text();
+  const users = parseLoginUsers(text);
+  log('loginusers', { count: users.length, sample: users.slice(0, 2) });
+});
+
+await step('localconfig', async () => {
+  const text = await (await fetch('data/localconfig.vdf')).text();
+  const lc = parseTextVdf(text);
+  const steamNode = getPath(lc, 'UserLocalConfigStore', 'Software', 'Valve', 'Steam');
+  log('localconfig', {
+    steamKeys: steamNode ? Object.keys(steamNode) : null,
+    playerLevel: steamNode ? steamNode.PlayerLevel : null,
+  });
+  const games = parseLocalConfigGames(text);
+  const sampleGames = {};
+  let i = 0;
+  for (const [id, g] of games) { if (i++ < 3) sampleGames[id] = g; }
+  log('localconfig-games', { count: games.size, sampleGames });
+});
+
+await step('schema-er', async () => {
+  const buf = await fetchBuf('data/schema_1245620.bin');
+  const sch = parseSchemaBin(buf, '1245620');
+  const summary = {};
+  let count = 0;
+  for (const [id, defs] of sch) { summary[id] = defs.size; count += defs.size; }
+  const firstDef = [...sch.entries()][0] && [...[...sch.entries()][0][1].values()][0];
+  log('schema-er', { groupCount: sch.size, totalAch: count, perGroup: summary, sampleDef: firstDef });
+});
+
+await step('userstats-er', async () => {
+  const ubuf = await fetchBuf('data/userstats_er.bin');
+  const u = parseUserStatsBin(ubuf, '1245620');
+  const gsummary = {};
+  for (const [id, m] of u.groups) gsummary[id] = m.size;
+  log('userstats-er', { gameName: u.gameName, groups: gsummary, bitData: Object.fromEntries(u.bitData) });
+});
+
+await step('merge-er', async () => {
+  const sbuf = await fetchBuf('data/schema_1245620.bin');
+  const ubuf = await fetchBuf('data/userstats_er.bin');
+  const defs = parseSchemaBin(sbuf, '1245620');
+  const u = parseUserStatsBin(ubuf, '1245620');
+  const list = [];
+  const ids = new Set([...defs.keys(), ...u.groups.keys()]);
+  for (const id of [...ids].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) {
+    const d = defs.get(id) || new Map();
+    const t = u.groups.get(id) || new Map();
+    for (const k of new Set([...d.keys(), ...t.keys()])) {
+      const def = d.get(k);
+      const rec = t.get(k);
+      if (def || rec) list.push({ id, k, api: def ? def.api : null, name: def ? def.name : null, earned: !!rec, t: rec ? rec.earnedtime : 0 });
+    }
+  }
+  log('merge-er', {
+    total: list.length,
+    unlocked: list.filter(x => x.earned).length,
+    sampleUnlocked: list.filter(x => x.earned).slice(0, 4),
+    sam: detectSamBatches(list),
+  });
+});
+
+await step('merge-105600', async () => {
+  const sbuf = await fetchBuf('data/schema_105600.bin');
+  const ubuf = await fetchBuf('data/userstats2.bin');
+  const defs = parseSchemaBin(sbuf, '105600');
+  const u = parseUserStatsBin(ubuf, '105600');
+  const list = [];
+  const ids = new Set([...defs.keys(), ...u.groups.keys()]);
+  for (const id of [...ids].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))) {
+    const d = defs.get(id) || new Map();
+    const t = u.groups.get(id) || new Map();
+    for (const k of new Set([...d.keys(), ...t.keys()])) {
+      const def = d.get(k);
+      const rec = t.get(k);
+      if (def || rec) list.push({ id, k, api: def ? def.api : null, name: def ? def.name : null, earned: !!rec, t: rec ? rec.earnedtime : 0 });
+    }
+  }
+  log('merge-105600', {
+    total: list.length,
+    unlocked: list.filter(x => x.earned).length,
+    sample: list.slice(0, 4),
+  });
+});
+
+await step('appinfo-section10', async () => {
+  const buf = await fetchBuf('data/appinfo.vdf');
+  const dv = new DataView(buf);
+  const keyTableOffset = Number(dv.getBigInt64(8, true));
+  const count = dv.getInt32(keyTableOffset, true);
+  const bytes = new Uint8Array(buf);
+  const keyTable = [];
+  let p = keyTableOffset + 4;
+  for (let i = 0; i < count; i++) {
+    const start = p;
+    while (p < bytes.length && bytes[p] !== 0) p++;
+    keyTable.push(new TextDecoder().decode(bytes.subarray(start, p)));
+    p++;
+  }
+  // 定位 appid 10 的节(0x1971, vdfSize 5984)
+  const slice = buf.slice(0x1971 + 68, 0x1971 + 68 + 5984);
+  const r = new Reader(slice);
+  const log = [];
+  const stack = [];
+  let n = 0;
+  while (!r.eof() && n < 60) {
+    const pos0 = r.pos;
+    let t;
+    try { t = r.readByte(); } catch (e) { log.push(`0x${pos0.toString(16)} BYTE-ERR`); break; }
+    if (t === 8 || t === 11) { log.push(`0x${pos0.toString(16)} END ← ${stack.pop()}`); n++; continue; }
+    let key;
+    try {
+      const idx = r.readInt32();
+      key = keyTable[idx] !== undefined ? keyTable[idx] : `#${idx}`;
+    } catch (e) { log.push(`0x${pos0.toString(16)} KEY-ERR`); break; }
+    const indent = '  '.repeat(Math.min(stack.length, 10));
+    switch (t) {
+      case 0: stack.push(key); log.push(`0x${pos0.toString(16)} ${indent}MAP ${JSON.stringify(key.slice(0, 24))}`); break;
+      case 1: { const v = r.readCString(); log.push(`0x${pos0.toString(16)} ${indent}STR ${JSON.stringify(key.slice(0, 24))} = ${JSON.stringify(v.slice(0, 30))}`); break; }
+      case 2: { const v = r.readInt32(); log.push(`0x${pos0.toString(16)} ${indent}INT ${JSON.stringify(key.slice(0, 24))} = ${v}`); break; }
+      case 10: { const v = r.readInt64(); log.push(`0x${pos0.toString(16)} ${indent}I64 ${JSON.stringify(key.slice(0, 24))} = ${v}`); break; }
+      default: log.push(`0x${pos0.toString(16)} ${indent}★★★ type 0x${t.toString(16)} key=${JSON.stringify(key.slice(0, 20))}`); break;
+    }
+    n++;
+  }
+  results.push('===== appinfo-section10 =====\n' + log.join('\n'));
+});
+
+await step('appinfo-coverage', async () => {
+  const abuf = await fetchBuf('data/appinfo.vdf');
+  const map = extractAppInfo(abuf);
+  const lctext = await (await fetch('data/localconfig.vdf')).text();
+  const games = parseLocalConfigGames(lctext);
+  let covered = 0, missing = [], zh = 0;
+  for (const appid of games.keys()) {
+    const info = map.get(appid);
+    if (info && info.name) { covered++; if (info.nameZh) zh++; }
+    else missing.push(appid);
+  }
+  log('appinfo-coverage', {
+    libraryGames: games.size,
+    covered,
+    missingCount: missing.length,
+    missingSample: missing.slice(0, 10),
+    zhCoverage: zh,
+  });
+});
+
+await step('appinfo-scan', async () => {
+  const buf = await fetchBuf('data/appinfo.vdf');
+  const dv = new DataView(buf);
+  const keyTableOffset = Number(dv.getBigInt64(8, true));
+  const endLimit = keyTableOffset - 4;
+  let pos = 16;
+  let n = 0;
+  const anomalies = [];
+  let lastOk = 0;
+  while (pos < endLimit && n < 3000000) {
+    const appid = dv.getUint32(pos, true);
+    const entrySize = dv.getUint32(pos + 4, true);
+    const vdfSize = entrySize - 60;
+    if (appid === 0) { anomalies.push(`#${n} appid=0 于 0x${pos.toString(16)}`); break; }
+    if (vdfSize < 0 || pos + 68 + vdfSize > buf.byteLength) {
+      anomalies.push(`#${n} pos=0x${pos.toString(16)} appid=${appid} entrySize=${entrySize} vdfSize=${vdfSize} 越界`);
+      break;
+    }
+    lastOk = pos;
+    pos += 68 + vdfSize;
+    n++;
+  }
+  const remaining = endLimit - pos;
+  results.push('===== appinfo-scan =====\n' + [
+    `共解析节: ${n}`,
+    `最后节位置: 0x${lastOk.toString(16)}`,
+    `keyTableOffset-4: 0x${endLimit.toString(16)}`,
+    `剩余未解析: ${remaining} 字节 (${(remaining / 1024 / 1024).toFixed(1)} MB)`,
+    ...anomalies,
+  ].join('\n'));
+});
+
+await step('appinfo-diag', async () => {
+  const buf = await fetchBuf('data/appinfo.vdf');
+  const dv = new DataView(buf);
+  const magic = dv.getUint32(0, true);
+  const universe = dv.getUint32(4, true);
+  const keyTableOffset = Number(dv.getBigInt64(8, true));
+  const log = [`magic=0x${magic.toString(16)} universe=${universe} keyTableOffset=0x${keyTableOffset.toString(16)} size=${buf.byteLength}`];
+  let pos = 16;
+  for (let n = 0; n < 25 && pos < buf.byteLength; n++) {
+    const appid = dv.getUint32(pos, true);
+    const entrySize = dv.getUint32(pos + 4, true);
+    const infoState = dv.getUint32(pos + 8, true);
+    const vdfSize = entrySize - 60;
+    log.push(`#${n} pos=0x${pos.toString(16)} appid=${appid} entrySize=${entrySize} vdfSize=${vdfSize} infoState=${infoState} next=0x${(pos + 68 + Math.max(vdfSize, 0)).toString(16)}`);
+    if (appid === 0) { log.push('EOF appid=0'); break; }
+    if (entrySize < 60 || pos + 68 + vdfSize > buf.byteLength) { log.push('!! 越界/非法,终止'); break; }
+    pos += 68 + vdfSize;
+  }
+  results.push('===== appinfo-diag =====\n' + log.join('\n'));
+});
+
+await step('appinfo', async () => {
+  const buf = await fetchBuf('data/appinfo.vdf');
+  const t0 = performance.now();
+  const map = extractAppInfo(buf);
+  const t1 = performance.now();
+  const sample = {};
+  let k = 0;
+  for (const [id, v] of map) { if (k++ < 3) sample[id] = v; }
+  log('appinfo', {
+    count: map.size, parseMs: Math.round(t1 - t0), sample,
+    has730: map.get('730') || null, has1245620: map.get('1245620') || null,
+    has105600: map.get('105600') || null, has1030300: map.get('1030300') || null,
+    withName: [...map.values()].filter(v => v.name).length,
+    withZh: [...map.values()].filter(v => v.nameZh).length,
+    games: [...map.values()].filter(v => v.type === 'Game').length,
+  });
+});
+
+out.textContent = results.join('\n\n') + '\n\n===== DONE =====';
+</script>
+</body>
+</html>
