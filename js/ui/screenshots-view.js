@@ -81,7 +81,7 @@ export async function shotsGameView([appid]) {
 
   const bar = el('div', { class: 'selection-bar', style: { display: 'none' } },
     el('span', { id: 'sel-count', style: { fontWeight: '700' } }, '0 张已选'),
-    el('button', { class: 'candy-btn candy-mint', onclick: () => downloadZip(selected, shots, name) }, '保存 ZIP'),
+    el('button', { class: 'candy-btn candy-mint', onclick: async () => { await downloadZip(selected, shots, name); refreshSel(); } }, '保存 ZIP'),
     el('button', { class: 'ghost-btn', onclick: () => { selected.clear(); refreshSel(); } }, '清空选择'),
   );
 

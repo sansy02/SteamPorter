@@ -17,6 +17,7 @@ while ($true) {
   } catch { break }
   try {
     $path = $ctx.Request.Url.AbsolutePath
+    if ($path -eq '/') { $path = '/index.html' }
     if ($path -match '\.\.') { $ctx.Response.StatusCode = 403 }
     else {
       $file = Join-Path $Root ($path.TrimStart('/').Replace('/', '\'))

@@ -1,7 +1,7 @@
 // 启动:门禁 → OpenID 回调 → 恢复登录态 → 路由
-import { state, on } from './state.js';
+import { state } from './state.js';
 import { register, route, navigate } from './router.js';
-import { el, toast, modal } from './ui/ui.js';
+import { el } from './ui/ui.js';
 import { isSupported, restoreFolderHandle, requestPermission, getSelectedSid64 } from './fs/steam-folder.js';
 import { loadLoginUsers } from './data/loginusers.js';
 import { initTopbar, renderTopbar } from './ui/topbar.js';
@@ -35,9 +35,7 @@ function guideView() {
       ),
     ),
     el('div', { class: 'guide-title' }, '你的 Steam 终端,', el('b', {}, '数据只留在本地')),
-    el('div', { class: 'guide-sub' },
-      '库价值 · 真实时长 · 成就 · 截图 · 存档备份 · 挂机检测<br>不碰密码、不上传任何数据、无服务器',
-    ),
+    el('div', { class: 'guide-sub', html: '库价值 · 真实时长 · 成就 · 截图 · 存档备份 · 挂机检测<br>不碰密码、不上传任何数据、无服务器' }),
     el('div', { class: 'guide-cards' },
       el('div', { class: 'guide-card' },
         el('h3', {}, '🔌 连接 Steam 文件夹'),
@@ -53,10 +51,7 @@ function guideView() {
         ? el('button', { class: 'candy-btn candy-coral', onclick: () => openAccountPicker() }, '连接 Steam')
         : el('div', { class: 'gate-warn' }, '⚠️ 当前浏览器不支持读取本地文件,请使用桌面版 Chrome 或 Edge 打开。'),
     ),
-    el('div', { class: 'guide-note' },
-      '安全说明:纯静态网站,无服务器、无数据库。所有数据只在你的浏览器与本地文件之间流转。<br>'
-      + '截图与存档的打包、备份全部在本地完成。封面图加载自 Steam 官方 CDN。',
-    ),
+    el('div', { class: 'guide-note', html: '安全说明:纯静态网站,无服务器、无数据库。所有数据只在你的浏览器与本地文件之间流转。<br>截图与存档的打包、备份全部在本地完成。封面图加载自 Steam 官方 CDN。' }),
   );
   return wrap;
 }
@@ -71,6 +66,7 @@ function initNav() {
 async function boot() {
   initNav();
   initTopbar();
+  route();
 
   // 1) OpenID 回调处理(登录弹窗或主窗口跳回)
   const openidResult = consumeOpenIdResult();
